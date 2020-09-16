@@ -1,0 +1,17 @@
+{
+	"id": "nodebb-plugin-create-forum",
+	"name": "NodeBB Write-Enabled API",
+	"description": "A RESTful JSON-speaking API allowing you to write things to NodeBB",
+	"url": "https://github.com/bandanasahu123/nodebb-create-forum-api",
+	"library": "./index.js",
+	"templates": "templates",
+	"hooks": [
+		{ "hook": "static:app.load", "method": "load" }
+	],
+	"less": [
+		"./less/style.less"
+	],
+	"acpScripts": [
+		"public/js/admin.js"
+	]
+}

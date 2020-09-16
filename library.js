@@ -1,4 +1,7 @@
 const axios = require('axios')
+var Categories = require.main.require('./src/categories')
+var errorHandler = require('./lib/errorHandler')
+var utils = require('./routes/v2/utils')
 
 const options = {
   headers: {
@@ -13,20 +16,28 @@ function insertCategory (body) {
       name: `${body.course_name}(${body.batch_start_date} - ${body.batch_end_date})`,
       parentCid: body.parentCid || ''
     }
-    axios
-      .post('http://localhost:4567/api/v2/categories', reqData, options)
-      .then(res => {
-        console.log('RESPONSE ==== : ', res.data)
-        let resObj = {
-          status: res.status,
-          data: res.data
-        }
-        return resolve(resObj)
-      })
-      .catch(err => {
-        console.log('ERROR: ====', err)
-        return reject(err)
-      })
+    if (!utils.checkRequired(['name'], req, res)) {
+      return false
+    }
+
+    Categories.create(body, function (err, categoryObj) {
+      console.log('--------------',err,categoryObj)
+      return errorHandler.handle(err, res, categoryObj)
+    })
+    // axios
+    //   .post('http://localhost:4567/api/v2/categories', reqData, options)
+    //   .then(res => {
+    //     console.log('RESPONSE ==== : ', res.data)
+    //     let resObj = {
+    //       status: res.status,
+    //       data: res.data
+    //     }
+    //     return resolve(resObj)
+    //   })
+    //   .catch(err => {
+    //     console.log('ERROR: ====', err)
+    //     return reject(err)
+    //   })
   })
 }
 
