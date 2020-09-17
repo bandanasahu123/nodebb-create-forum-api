@@ -8,35 +8,81 @@ var async = require('async')
 function createForum (req, res, next) {
   console.log('------------------ createForum --------------------', req.body)
   let { body } = req
-  const reqData = {
-    name: `${body.course_name}(${body.batch_start_date} - ${body.batch_end_date})`,
-    parentCid: body.parentCid || ''
+  let name = body.course_name
+  if (!body.course_name) return res.send('Please provide the course name')
+  if (!body.tenant_id) return res.send('Please provide your tenent ID')
+  if (!body.batch_id) return res.send('Please provide your batch ID')
+
+  if (body.batch_start_date && body.batch_end_date) {
+    name = `${body.course_name}(${body.batch_start_date} - ${body.batch_end_date})`
+  } else if (body.batch_start_date && !body.batch_end_date) {
+    name = `${body.course_name}(${body.batch_start_date})`
+  } else {
+    name = name
   }
+
   return new Promise(function (resolve, reject) {
-    Categories.create(reqData)
-      .then(categoryObj => {
-        if (categoryObj) {
-          let jsonObj = {
-            _key: `batchid_catid_map:${categoryObj.cid}`,
-            batch_id: body.batch_id,
-            cat_id: categoryObj.cid
-          }
-          let group = createGroup(body, categoryObj)
-          let mapping = mappingFunction(`batch:${body.batch_id}`, jsonObj)
-          Promise.all([group, mapping])
-            .then(responnse => {
-				console.log('-------------------promise all response------------------')
-			})
-            .catch(err => {
-              return reject(err)
-            })
+    // fetch the parentcid from db using tenant name and tenent id
+    db.getObject(`tenant_cat_map:` + body.tenant_id)
+      .then(tenentObj => {
+        let pID = tenentObj && tenentObj.cat_id ? tenentObj.cat_id : ''
+
+        const reqData = {
+          name: name,
+          parentCid: pID
         }
+
+        Categories.create(reqData)
+          .then(categoryObj => {
+            if (categoryObj) {
+              let jsonObj = {
+                _key: `batchid_catid_map:${categoryObj.cid}`,
+                batch_id: body.batch_id,
+                cat_id: categoryObj.cid
+              }
+              let group = createGroup(body, categoryObj)
+              let mapping = mappingFunction(`batch:${body.batch_id}`, jsonObj)
+
+              if (!pID) {
+                let jsonTenanatObj = {
+                  cat_id: categoryObj.cid,
+                  tenant_id: body.tenant_id,
+                  name: body.course_name
+                }
+
+                var mappingTenant = mappingFunction(
+                  `tenant_cat_map:${body.tenant_id}`,
+                  jsonTenanatObj
+                )
+              }
+
+              let responseDta = Promise.all([group, mapping, mappingTenant])
+                .then(responnse => {
+                  return resolve(responnse)
+                })
+                .catch(err => {
+                  return reject(err)
+                })
+
+              if (responseDta) {
+                return res.json({
+                  status: 200,
+                  message: 'Successfully created forum / tenant!'
+                })
+              }
+            }
+          })
+          .catch(err => {
+            return reject({
+              status: 400,
+              message: 'Error in inserting category',
+              error: err
+            })
+          })
       })
       .catch(err => {
         return reject({
-          status: 400,
-          message: 'Error in inserting category',
-          error: err
+          err: err
         })
       })
   })
@@ -44,12 +90,8 @@ function createForum (req, res, next) {
 
 function createGroup (body, catObj) {
   return new Promise(function (resolve, reject) {
-    let groupNameArr = [
-      `moderator-${body.course_name}`,
-      `general-${body.course_name}`
-    ]
+    let groupNameArr = [`batch-${body.batch_id}`]
     groupNameArr.map((groupName, inx) => {
-      console.log('----------groupName----------', groupName)
       Groups.create({ name: groupName })
         .then(groupObj => {
           if (groupObj) {
@@ -67,21 +109,34 @@ function createGroup (body, catObj) {
   })
 }
 
-function addUserIntoGroup (body, groupName, catObj) {
+async function addUserIntoGroup (body, groupName, catObj) {
   return new Promise(function (resolve, reject) {
-    body.moderators.map(uid => {
-      Groups.join(groupName, uid)
-        .then(data => {
-          return addUserPreviliges(body, uid, catObj)
+    body.moderators
+      .map(sunbirdAuthId => {
+        return getUserIdFromOauthId(sunbirdAuthId).then(uid => {
+          if (uid) {
+            Groups.join(groupName, uid)
+              .then(data => {
+                return addUserPreviliges(body, uid, catObj)
+              })
+              .catch(err => {
+                return reject({
+                  status: 400,
+                  message: 'Error in adding users into groups',
+                  Error: err
+                })
+              })
+          } else {
+            console.log(
+              '---------- no user id found ---------------',
+              sunbirdAuthId
+            )
+          }
         })
-        .catch(err => {
-          return reject({
-            status: 400,
-            message: 'Error in adding users into groups',
-            Error: err
-          })
-        })
-    })
+      })
+      .catch(err => {
+        return reject(err)
+      })
   })
 }
 
@@ -107,7 +162,9 @@ function addUserPreviliges (body, uid, catObj) {
     ]
 
     changeGroupMembership(catObj.cid, privileges, groups, 'join')
-      .then(res => {})
+      .then(res => {
+        return removeuserPreviliges(catObj.cid)
+      })
       .catch(err => {
         return reject({
           status: 400,
@@ -115,6 +172,47 @@ function addUserPreviliges (body, uid, catObj) {
           Error: err
         })
       })
+  })
+}
+
+function removeuserPreviliges (cid) {
+  let delgroupData = ['registered-users', 'guests', 'spiders']
+  let previligesArray = null
+  return new Promise(function (resolve, reject) {
+    delgroupData.map(name => {
+      name.includes('users')
+        ? (previligesArray = [
+            'groups:topics:read',
+            'groups:read',
+            'groups:find',
+            'groups:topics:create',
+            'groups:topics:reply',
+            'groups:topics:tag',
+            'groups:posts:edit',
+            'groups:posts:history',
+            'groups:posts:delete',
+            'groups:posts:upvote',
+            'groups:posts:downvote',
+            'groups:topics:delete',
+            'groups:posts:view_deleted',
+            'groups:purge',
+            'groups:moderate'
+          ])
+        : (previligesArray = [
+            'groups:read',
+            'groups:find',
+            'groups:topics:read'
+          ])
+      changeGroupMembership(cid, previligesArray, name, 'leave')
+        .then(data => {
+          return resolve(data)
+        })
+        .catch(err => {
+          return reject({
+            err: err
+          })
+        })
+    })
   })
 }
 
@@ -154,27 +252,34 @@ async function mappingFunction (key, obj) {
 
 function createUser (req, res, next) {
   Users.create(req.body, function (err, uid) {
-    console.log('------------------', err)
-    console.log('------------uid>>>>>>>>>>>uid------', uid)
     if (uid) {
       let jsonObj = {
-        _key: `sunbird_nodebb_user_map:${uid}`,
-        uid: uid,
-        sunbird_id: req.body.sunbirdid
+        [req.body.oauth_id]: uid
       }
-      mappingFunction(`user:${uid}`, jsonObj)
+      mappingFunction(`sunbird-oidcId:uid`, jsonObj)
+      res.json({ status: 200, messsage: 'Successfully user created!' })
     }
-    // return errorHandler.handle(err, res, {
-    // 	uid: uid
-    // });
   })
 }
 
+function findKey (req, res, next) {
+  db.getObject(req.body.key, (err, response) => {
+    if (err) throw err
+    return res.send(response)
+  })
+}
+
+async function getUserIdFromOauthId (sunbirdId) {
+  let uid = await db.getObjectField('sunbird-oidcId:uid', sunbirdId)
+  return uid
+}
+
 Plugin.load = function (params, callback) {
-  console.log('-----------------', params, '-------------------------')
   var router = params.router
 
   router.post('/api/create-forum', createForum)
   router.post('/api/create-user', createUser)
+  router.post('/api/fetch-map-data', findKey)
+  router.post('/api/create-tenant', createForum)
   callback()
 }
