@@ -265,6 +265,7 @@ function createUser (req, res, next) {
 function findKey (req, res, next) {
   db.getObject(req.body.key, (err, response) => {
     if (err) throw err
+    console.log('------------------', err, response)
     return res.send(response)
   })
 }
