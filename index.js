@@ -4,9 +4,11 @@ var Groups = require.main.require('./src/groups')
 var db = require.main.require('./src/database')
 var Users = require.main.require('./src/user')
 var async = require('async')
+var apiMiddleware = require('./middleware')
 
 function createForum (req, res, next) {
   console.log('------------------ createForum --------------------', req.body)
+  return true
   let { body } = req
   let name = body.course_name
   if (!body.course_name) return res.send('Please provide the course name')
@@ -278,9 +280,24 @@ async function getUserIdFromOauthId (sunbirdId) {
 Plugin.load = function (params, callback) {
   var router = params.router
 
-  router.post('/api/create-forum', createForum)
-  router.post('/api/create-user', createUser)
+  router.post(
+    '/api/create-forum',
+    apiMiddleware.requireUser,
+    apiMiddleware.requireAdmin,
+    createForum
+  )
+  router.post(
+    '/api/create-user',
+    apiMiddleware.requireUser,
+    apiMiddleware.requireAdmin,
+    createUser
+  )
   router.post('/api/fetch-map-data', findKey)
-  router.post('/api/create-tenant', createForum)
+  router.post(
+    '/api/create-tenant',
+    apiMiddleware.requireUser,
+    apiMiddleware.requireAdmin,
+    createForum
+  )
   callback()
 }
