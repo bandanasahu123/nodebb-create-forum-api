@@ -8,7 +8,6 @@ var apiMiddleware = require('./middleware')
 
 function createForum (req, res, next) {
   console.log('------------------ createForum --------------------', req.body)
-  return true
   let { body } = req
   let name = body.course_name
   if (!body.course_name) return res.send('Please provide the course name')
