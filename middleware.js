@@ -123,7 +123,8 @@ Middleware.requireUser = async function (req, res, next) {
     })
   } else {
     // No bearer token, jwt, or special handling instructions, transparently pass-through
-    next()
+    // next()
+    return errorHandler.respond(401, res)
   }
 }
 
