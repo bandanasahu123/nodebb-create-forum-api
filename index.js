@@ -114,6 +114,54 @@ async function addSectionURL (req, res) {
     })
 }
 
+async function createForumAPI (req, res) {
+  console.log('------------ api.discussions.forum.create----------', req.body)
+  let { body } = req
+  var reqPrivileges = body.request.privileges
+  return createForum(body.request)
+    .then(catResponse => {
+      console.log('------catResponse-----', catResponse)
+      let allCatIds = []
+      catResponse.sectionObj.map(section => {
+        allCatIds.push(section.cid)
+      })
+      console.log(allCatIds, '>>>>>>>>>>>>>>>>>>>>>>>')
+      return addPrivileges(reqPrivileges, allCatIds)
+        .then(privilegesResponse => {
+          let resObj = {
+            id: 'api.discussions.forum.create',
+            msgId: req.body.params.msgid,
+            status: 'successful',
+            resCode: 'OK',
+            data: catResponse
+          }
+          return res.json(responseMessage.successResponse(resObj))
+        })
+        .catch(error => {
+          let resObj = {
+            id: 'api.discussions.forum.create',
+            msgId: req.body.params.msgid,
+            status: 'failed',
+            resCode: 'SERVER_ERROR',
+            err: error.status,
+            errmsg: error.message
+          }
+          return res.json(responseMessage.errorResponse(resObj))
+        })
+    })
+    .catch(error => {
+      let resObj = {
+        id: 'api.discussions.forum.create',
+        msgId: req.body.params.msgid,
+        status: 'failed',
+        resCode: 'SERVER_ERROR',
+        err: error.status,
+        errmsg: error.message
+      }
+      return res.json(responseMessage.errorResponse(resObj))
+    })
+}
+
 Plugin.load = function (params, callback) {
   var router = params.router
 
@@ -123,14 +171,13 @@ Plugin.load = function (params, callback) {
     apiMiddleware.requireAdmin,
     createForumAPI
   )
-  router.post(
-    '/api/create-user',
-    apiMiddleware.requireUser,
-    apiMiddleware.requireAdmin,
-    createUser
-  )
-  router.post('/api/fetch-map-data', findKey)
-  router.post('/api/add-category', addCategory)
+  // router.post(
+  //   '/api/create-user',
+  //   apiMiddleware.requireUser,
+  //   apiMiddleware.requireAdmin,
+  //   createUser
+  // )
+  // router.post('/api/fetch-map-data', findKey)
   router.post(
     createTenantURL,
     apiMiddleware.requireUser,

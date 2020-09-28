@@ -25,7 +25,6 @@ function createCategory (body) {
         let pID = tenentObj && tenentObj.cat_id ? tenentObj.cat_id : ''
 
         if (existedCatId == tenantId) {
-          // if (existedCatName == body.name) {
           return reject({
             status: 400,
             message: 'Already category id exist for this tenant!'
@@ -40,58 +39,49 @@ function createCategory (body) {
             .then(categoryObj => {
               if (!pID) {
                 if (sections.length > 0) {
-                  sections.map((secName, inx) => {
-                    let name = secName.replace(/\s+/g, '-').toLowerCase()
-                    const bodyData = {
-                      name: secName,
-                      parentCid: categoryObj.cid
-                    }
-                    Categories.create(bodyData)
-                      .then(catData => {
-                        sectionArray.push(catData)
-                        sectionObj[name] = catData.cid
-                        if (sections.length === sectionArray.length) {
-                          let jsonTenanatObj = {
-                            ...sectionObj,
-                            cat_id: categoryObj.cid,
-                            tenant_id: tenantId,
-                            name: body.name
-                          }
+                  return commonAddSection(
+                    body.name,
+                    sections,
+                    categoryObj.cid,
+                    tenantId
+                  )
+                    .then(res => {
+                      let response = {
+                        categoryObj: categoryObj,
+                        sectionObj: res
+                      }
+                      return resolve(response)
+                    })
+                    .catch(error => {
+                      return reject(error)
+                    })
+                } else {
+                  let jsonTenanatObj = {
+                    cat_id: categoryObj.cid,
+                    tenant_id: tenantId,
+                    name: body.name
+                  }
 
-                          mappingTenant = mappingFunction(
-                            `tenant_cat_map:${tenantId}`,
-                            jsonTenanatObj
-                          )
+                  mappingTenant = mappingFunction(
+                    `tenant_cat_map:${tenantId}`,
+                    jsonTenanatObj
+                  )
 
-                          Promise.all([mappingTenant])
-                            .then(responnse => {
-                              let response = {
-                                categoryObj: categoryObj,
-                                sectionObj: sectionArray
-                              }
-                              return resolve(response)
-                            })
-                            .catch(err => {
-                              return reject({
-                                status: 400,
-                                message: 'Error in mapping data.',
-                                error: err
-                              })
-                            })
-                        }
+                  Promise.all([mappingTenant])
+                    .then(responnse => {
+                      let response = {
+                        categoryObj: categoryObj,
+                        sectionObj: []
+                      }
+                      return resolve(response)
+                    })
+                    .catch(err => {
+                      return reject({
+                        status: 400,
+                        message: 'Error in mapping data.',
+                        error: err
                       })
-                      .catch(err => {
-                        console.log(
-                          err,
-                          'error in inserting sectionb --------------------'
-                        )
-                        return reject({
-                          status: 400,
-                          message: 'Error in inserting sections.',
-                          error: err
-                        })
-                      })
-                  })
+                    })
                 }
               } else {
                 return resolve(categoryObj)
@@ -118,6 +108,64 @@ function createCategory (body) {
   })
 }
 
+function commonAddSection (cname, sections, cid, tenantId) {
+  let sectionArray = [],
+    sectionObj = {}
+  return new Promise(function (resolve, reject) {
+    if (sections.length > 0) {
+      sections.map((secName, inx) => {
+        let name = secName.replace(/\s+/g, '-').toLowerCase()
+        const bodyData = {
+          name: secName,
+          parentCid: cid
+        }
+        Categories.create(bodyData)
+          .then(catData => {
+            sectionArray.push(catData)
+            sectionObj[name] = catData.cid
+            if (sections.length === sectionArray.length) {
+              let jsonTenanatObj = {
+                ...sectionObj,
+                cat_id: cid,
+                tenant_id: tenantId,
+                name: cname
+              }
+
+              mappingTenant = mappingFunction(
+                `tenant_cat_map:${tenantId}`,
+                jsonTenanatObj
+              )
+
+              Promise.all([mappingTenant])
+                .then(responnse => {
+                  //   let response = {
+                  //     categoryObj: categoryObj,
+                  //     sectionObj: sectionArray
+                  //   }
+                  return resolve(sectionArray)
+                })
+                .catch(err => {
+                  return reject({
+                    status: 400,
+                    message: 'Error in mapping data.',
+                    error: err
+                  })
+                })
+            }
+          })
+          .catch(err => {
+            console.log(err, 'error in inserting sectionb --------------------')
+            return reject({
+              status: 400,
+              message: 'Error in inserting sections.',
+              error: err
+            })
+          })
+      })
+    }
+  })
+}
+
 function addSection (body) {
   const tenantId = body.organisationId
   const sections = body.sections
@@ -130,57 +178,16 @@ function addSection (body) {
         let pID = tenentObj && tenentObj.cat_id ? tenentObj.cat_id : ''
 
         if (sections.length > 0) {
-          sections.map((secName, inx) => {
-            let name = secName.replace(/\s+/g, '-').toLowerCase()
-            const bodyData = {
-              name: secName,
-              parentCid: pID
-            }
-            Categories.create(bodyData)
-              .then(catData => {
-                sectionArray.push(catData)
-                sectionObj[name] = catData.cid
-                if (sections.length === sectionArray.length) {
-                  let jsonTenanatObj = {
-                    ...sectionObj,
-                    cat_id: pID,
-                    tenant_id: tenantId,
-                    name: tenentObj.name
-                  }
-
-                  mappingTenant = mappingFunction(
-                    `tenant_cat_map:${tenantId}`,
-                    jsonTenanatObj
-                  )
-
-                  Promise.all([mappingTenant])
-                    .then(responnse => {
-                      let response = {
-                        sectionObj: sectionArray
-                      }
-                      return resolve(response)
-                    })
-                    .catch(err => {
-                      return reject({
-                        status: 400,
-                        message: 'Error in mapping data.',
-                        error: err
-                      })
-                    })
-                }
-              })
-              .catch(err => {
-                console.log(
-                  err,
-                  'error in inserting sectionb --------------------'
-                )
-                return reject({
-                  status: 400,
-                  message: 'Error in inserting sections.',
-                  error: err
-                })
-              })
-          })
+          return commonAddSection(tenentObj.name, sections, pID, tenantId)
+            .then(res => {
+              let response = {
+                sectionObj: res
+              }
+              return resolve(response)
+            })
+            .catch(error => {
+              return reject(error)
+            })
         }
       })
       .catch(error => {

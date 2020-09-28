@@ -758,3 +758,143 @@ function createUser (req, res, next) {
     }
   })
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          //   sections.map((secName, inx) => {
+          //     let name = secName.replace(/\s+/g, '-').toLowerCase()
+          //     const bodyData = {
+          //       name: secName,
+          //       parentCid: pID
+          //     }
+          //     Categories.create(bodyData)
+          //       .then(catData => {
+          //         sectionArray.push(catData)
+          //         sectionObj[name] = catData.cid
+          //         if (sections.length === sectionArray.length) {
+          //           let jsonTenanatObj = {
+          //             ...sectionObj,
+          //             cat_id: pID,
+          //             tenant_id: tenantId,
+          //             name: tenentObj.name
+          //           }
+
+          //           mappingTenant = mappingFunction(
+          //             `tenant_cat_map:${tenantId}`,
+          //             jsonTenanatObj
+          //           )
+
+          //           Promise.all([mappingTenant])
+          //             .then(responnse => {
+          //               let response = {
+          //                 sectionObj: sectionArray
+          //               }
+          //               return resolve(response)
+          //             })
+          //             .catch(err => {
+          //               return reject({
+          //                 status: 400,
+          //                 message: 'Error in mapping data.',
+          //                 error: err
+          //               })
+          //             })
+          //         }
+          //       })
+          //       .catch(err => {
+          //         console.log(
+          //           err,
+          //           'error in inserting sectionb --------------------'
+          //         )
+          //         return reject({
+          //           status: 400,
+          //           message: 'Error in inserting sections.',
+          //           error: err
+          //         })
+          //       })
+          //   })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+             //   sections.map((secName, inx) => {
+                  //     let name = secName.replace(/\s+/g, '-').toLowerCase()
+                  //     const bodyData = {
+                  //       name: secName,
+                  //       parentCid: categoryObj.cid
+                  //     }
+                  //     Categories.create(bodyData)
+                  //       .then(catData => {
+                  //         sectionArray.push(catData)
+                  //         sectionObj[name] = catData.cid
+                  //         if (sections.length === sectionArray.length) {
+                  //           let jsonTenanatObj = {
+                  //             ...sectionObj,
+                  //             cat_id: categoryObj.cid,
+                  //             tenant_id: tenantId,
+                  //             name: body.name
+                  //           }
+
+                  //           mappingTenant = mappingFunction(
+                  //             `tenant_cat_map:${tenantId}`,
+                  //             jsonTenanatObj
+                  //           )
+
+                  //           Promise.all([mappingTenant])
+                  //             .then(responnse => {
+                  //               let response = {
+                  //                 categoryObj: categoryObj,
+                  //                 sectionObj: sectionArray
+                  //               }
+                  //               return resolve(response)
+                  //             })
+                  //             .catch(err => {
+                  //               return reject({
+                  //                 status: 400,
+                  //                 message: 'Error in mapping data.',
+                  //                 error: err
+                  //               })
+                  //             })
+                  //         }
+                  //       })
+                  //       .catch(err => {
+                  //         console.log(
+                  //           err,
+                  //           'error in inserting sectionb --------------------'
+                  //         )
+                  //         return reject({
+                  //           status: 400,
+                  //           message: 'Error in inserting sections.',
+                  //           error: err
+                  //         })
+                  //       })
+                  //   })
