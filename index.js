@@ -9,7 +9,13 @@ var responseMessage = require('./responseHandler')
 var createTenantURL = '/api/org/v1/setup'
 var createForumURL = '/api/forum/v1/create'
 var createSectionURL = '/api/org/v1/sections/add'
-var { createCategory, addPrivileges, addSection } = require('./library')
+var {
+  createCategory,
+  addPrivileges,
+  addSection,
+  createForum,
+  createGroup
+} = require('./library')
 
 async function setupOrgAPI (req, res) {
   console.log('------------ cretae teant ----------', req.body)
@@ -18,13 +24,11 @@ async function setupOrgAPI (req, res) {
   return createCategory(body.request)
     .then(catResponse => {
       if (catResponse) {
-        console.log('------catResponse-----', catResponse)
         let allCatIds = []
         catResponse.sectionObj.map(section => {
           allCatIds.push(section.cid)
         })
         allCatIds.push(catResponse.categoryObj.cid)
-        console.log(allCatIds, '>>>>>>>>>>>>>>>>>>>>>>>')
         return addPrivileges(reqPrivileges, allCatIds)
           .then(privilegesResponse => {
             console.log(
@@ -122,20 +126,33 @@ async function createForumAPI (req, res) {
     .then(catResponse => {
       console.log('------catResponse-----', catResponse)
       let allCatIds = []
-      catResponse.sectionObj.map(section => {
-        allCatIds.push(section.cid)
-      })
-      console.log(allCatIds, '>>>>>>>>>>>>>>>>>>>>>>>')
-      return addPrivileges(reqPrivileges, allCatIds)
-        .then(privilegesResponse => {
-          let resObj = {
-            id: 'api.discussions.forum.create',
-            msgId: req.body.params.msgid,
-            status: 'successful',
-            resCode: 'OK',
-            data: catResponse
-          }
-          return res.json(responseMessage.successResponse(resObj))
+      allCatIds.push(catResponse.cid)
+
+      return createGroup(body.request, allCatIds)
+        .then(groupObj => {
+          console.log('------groupObj-----', groupObj)
+          return addPrivileges(reqPrivileges, allCatIds)
+            .then(privilegesResponse => {
+              let resObj = {
+                id: 'api.discussions.forum.create',
+                msgId: req.body.params.msgid,
+                status: 'successful',
+                resCode: 'OK',
+                data: catResponse
+              }
+              return res.json(responseMessage.successResponse(resObj))
+            })
+            .catch(error => {
+              let resObj = {
+                id: 'api.discussions.forum.create',
+                msgId: req.body.params.msgid,
+                status: 'failed',
+                resCode: 'SERVER_ERROR',
+                err: error.status,
+                errmsg: error.message
+              }
+              return res.json(responseMessage.errorResponse(resObj))
+            })
         })
         .catch(error => {
           let resObj = {

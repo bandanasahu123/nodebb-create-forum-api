@@ -4,6 +4,7 @@ var db = require.main.require('./src/database')
 var Users = require.main.require('./src/user')
 var async = require('async')
 var _ = require('lodash')
+const { v4: uuidv4 } = require('uuid')
 
 function createCategory (body) {
   const tenantId = body.organisationId
@@ -95,6 +96,104 @@ function createCategory (body) {
                 error: err
               })
             })
+        }
+      })
+      .catch(err => {
+        console.log('>>>>>>> find tenent id error <<<<<<<<', err)
+        return reject({
+          status: 400,
+          message: 'Error in finding tenant id',
+          error: err
+        })
+      })
+  })
+}
+
+function createForum (body) {
+  const tenantId = body.organisationId
+  let sectionType = body.section
+  const catName = body.context.name
+  const identifier = body.context.identifier
+  const contextType = body.context.type
+  sectionType = sectionType.replace(/\s+/g, '-').toLowerCase()
+  console.log('------------------sectionType--------------', sectionType)
+
+  let pID = null,
+    jsonObj = null
+  return new Promise(function (resolve, reject) {
+    db.getObject(`tenant_cat_map:` + tenantId)
+      .then(tenentObj => {
+        console.log(tenentObj, '----------------------------')
+        if (tenentObj) {
+          if (!sectionType) {
+            pID = tenentObj && tenentObj.cat_id ? tenentObj.cat_id : ''
+          } else {
+            pID =
+              tenentObj && tenentObj[`${sectionType}`]
+                ? tenentObj[`${sectionType}`]
+                : ''
+          }
+          const reqData = {
+            name: catName,
+            parentCid: pID
+          }
+          Categories.create(reqData)
+            .then(categoryObj => {
+              db.getObject(`batchid_catid_map:` + identifier)
+                .then(batchData => {
+                  console.log(batchData, '-----------------------')
+                  if (batchData) {
+                    jsonObj = {
+                      ...batchData,
+                      [`cat_id - ${categoryObj.cid}`]: {
+                        cat_id: categoryObj.cid,
+                        name: catName
+                      }
+                    }
+                  } else {
+                    jsonObj = {
+                      batch_id: identifier,
+                      type: contextType,
+                      [`cat_id - ${categoryObj.cid}`]: {
+                        cat_id: categoryObj.cid,
+                        name: catName
+                      }
+                    }
+                  }
+                  console.log(jsonObj)
+                  let mapping = mappingFunction(
+                    `batchid_catid_map:${identifier}`,
+                    jsonObj
+                  )
+
+                  Promise.all([mapping])
+                    .then(responnse => {
+                      return resolve(categoryObj)
+                    })
+                    .catch(err => {
+                      return reject({
+                        status: 400,
+                        message: 'Error in mapping data.',
+                        error: err
+                      })
+                    })
+                })
+                .catch(error => {})
+            })
+            .catch(err => {
+              console.log('>>>>>>>> err in creating forum >>>', err)
+              return reject({
+                status: 400,
+                message: 'Error in creating forum',
+                error: err
+              })
+            })
+        } else {
+          return reject({
+            status: 400,
+            message: 'No tenentId exist!',
+            error: err
+          })
         }
       })
       .catch(err => {
@@ -210,7 +309,69 @@ async function mappingFunction (key, obj) {
   }
 }
 
-function addPrivileges (reqPrivileges, categoryObj) {
+function addPrivileges (reqPrivileges, catIds) {
+  let preArray = []
+  return new Promise(function (resolve, reject) {
+    return removeuserPreviliges(catIds)
+      .then(res => {
+        console.log('-------removeuserPreviliges response-----------', res)
+        reqPrivileges.map((privilege, index) => {
+          let permissions = privilege.permissions
+          let users = privilege.users
+          let groups = privilege.groups
+          groups.map(group => {
+            console.log('---------------group nameeeee--------', group)
+            return addGroupIntoCategory(group, permissions, catIds)
+              .then(res => {
+                return addUserIntoGroup(group, users, permissions, catIds)
+                  .then(response => {
+                    console.log(
+                      '-------addUserIntoGroup response---------',
+                      response
+                    )
+                    // resolve(res)
+                    preArray.push(response)
+                    console.log(
+                      '------------reqPrivileges.length === preArray.length----------',
+                      reqPrivileges.length,
+                      preArray.length
+                    )
+                    if (reqPrivileges.length === preArray.length)
+                      return resolve(response)
+                  })
+                  .catch(error => {
+                    return reject({
+                      status: 400,
+                      message: 'Error in adding users into category',
+                      error: error
+                    })
+                  })
+              })
+              .catch(error => {
+                console.log(
+                  error,
+                  '------Error in adding privileges into category---------'
+                )
+                return reject({
+                  status: 400,
+                  message: 'Error in adding privileges into category',
+                  error: error
+                })
+              })
+          })
+        })
+      })
+      .catch(error => {
+        return reject({
+          status: 400,
+          message: 'Error in removing privileges from group into category',
+          error: error
+        })
+      })
+  })
+}
+
+function addPrivilegesbackup (reqPrivileges, categoryObj) {
   let preArray = []
   return new Promise(function (resolve, reject) {
     reqPrivileges.map((privilege, index) => {
@@ -234,37 +395,30 @@ function addPrivileges (reqPrivileges, categoryObj) {
   })
 }
 
-function createGroup (groups, permissions, users, catIds) {
+function createGroup (body, catIds) {
   return new Promise(function (resolve, reject) {
-    groups.map((group, inx) => {
-      Groups.create({ name: group })
+    let array = []
+    body.groups.map((group, inx) => {
+      let groupName =
+        body.context.type +
+        '-' +
+        body.context.identifier +
+        '-' +
+        body.context.name +
+        '-' +
+        uuidv4()
+      Groups.create({ name: groupName, private: 1 })
         .then(groupObj => {
           if (groupObj) {
-            return addGroupIntoCategory(group, permissions, catIds)
+            return addGroupIntoCategory(groupName, group.permissions, catIds)
               .then(res => {
-                return removeuserPreviliges(catIds)
-                  .then(res => {
-                    return addUserIntoGroup(group, users, permissions, catIds)
-                      .then(res => {
-                        resolve(res)
-                      })
-                      .catch(error => {
-                        return reject({
-                          status: 400,
-                          message: 'Error in adding users into category',
-                          error: error
-                        })
-                      })
-                  })
-                  .catch(error => {
-                    return reject({
-                      status: 400,
-                      message: 'Error in removing privileges into category',
-                      error: error
-                    })
-                  })
+                array.push(res)
+                if (body.groups.length == array.length) {
+                  return resolve(res)
+                }
               })
               .catch(error => {
+                console.log(error, '-----------error-----------')
                 return reject({
                   status: 400,
                   message: 'Error in adding group into category',
@@ -295,11 +449,13 @@ async function addGroupIntoCategory (group, permissions, catIds) {
     })
     finalPrivileges = _.uniq(finalPrivileges)
     console.log(finalPrivileges, '----------------finalPrivileges----')
+    let arrData = []
 
     catIds.map(id => {
       changeGroupMembership(id, finalPrivileges, groups, 'join')
         .then(data => {
-          return resolve(data)
+          arrData.push(data)
+          if (catIds.length === arrData.length) return resolve(data)
         })
         .catch(err => {
           return reject({
@@ -533,12 +689,13 @@ function privilegesHirerchy (privilegs, type) {
       ]
       break
   }
-  console.log('------------givenPrivileges-------------', givenPrivileges)
   return givenPrivileges
 }
 
 module.exports = {
   createCategory,
   addPrivileges,
-  addSection
+  addSection,
+  createForum,
+  createGroup
 }
