@@ -1,4 +1,5 @@
 var Categories = require.main.require('./src/categories')
+var Privilegs = require.main.require('./src/privileges')
 var Groups = require.main.require('./src/groups')
 var db = require.main.require('./src/database')
 var Users = require.main.require('./src/user')
@@ -115,8 +116,6 @@ function createForum (body) {
   const catName = body.context.name
   const identifier = body.context.identifier
   const contextType = body.context.type
-  sectionType = sectionType.replace(/\s+/g, '-').toLowerCase()
-  console.log('------------------sectionType--------------', sectionType)
 
   let pID = null,
     jsonObj = null
@@ -128,6 +127,7 @@ function createForum (body) {
           if (!sectionType) {
             pID = tenentObj && tenentObj.cat_id ? tenentObj.cat_id : ''
           } else {
+            sectionType = sectionType.replace(/\s+/g, '-').toLowerCase()
             pID =
               tenentObj && tenentObj[`${sectionType}`]
                 ? tenentObj[`${sectionType}`]
@@ -137,56 +137,75 @@ function createForum (body) {
             name: catName,
             parentCid: pID
           }
-          Categories.create(reqData)
-            .then(categoryObj => {
-              db.getObject(`batchid_catid_map:` + identifier)
-                .then(batchData => {
-                  console.log(batchData, '-----------------------')
-                  if (batchData) {
-                    jsonObj = {
-                      ...batchData,
-                      [`cat_id - ${categoryObj.cid}`]: {
-                        cat_id: categoryObj.cid,
-                        name: catName
-                      }
-                    }
-                  } else {
-                    jsonObj = {
-                      batch_id: identifier,
-                      type: contextType,
-                      [`cat_id - ${categoryObj.cid}`]: {
-                        cat_id: categoryObj.cid,
-                        name: catName
-                      }
-                    }
-                  }
-                  console.log(jsonObj)
-                  let mapping = mappingFunction(
-                    `batchid_catid_map:${identifier}`,
-                    jsonObj
-                  )
+          return checkCat(catName, tenantId, contextType, identifier)
+            .then(data => {
+              console.log(data, '------------------------------')
+              if (data == true) {
+                Categories.create(reqData)
+                  .then(categoryObj => {
+                    db.getObject(`batchid_catid_map:` + identifier)
+                      .then(batchData => {
+                        console.log(batchData, '-----------------------')
+                        if (batchData) {
+                          jsonObj = {
+                            ...batchData,
+                            [`cat_id:${categoryObj.cid}`]: {
+                              cat_id: categoryObj.cid,
+                              name: catName,
+                              tenant_id: tenantId,
+                              batch: contextType + identifier
+                            }
+                          }
+                        } else {
+                          jsonObj = {
+                            batch_id: identifier,
+                            type: contextType,
+                            [`cat_id:${categoryObj.cid}`]: {
+                              cat_id: categoryObj.cid,
+                              name: catName,
+                              tenant_id: tenantId,
+                              batch: contextType + identifier
+                            }
+                          }
+                        }
+                        console.log(jsonObj)
+                        let mapping = mappingFunction(
+                          `batchid_catid_map:${identifier}`,
+                          jsonObj
+                        )
 
-                  Promise.all([mapping])
-                    .then(responnse => {
-                      return resolve(categoryObj)
-                    })
-                    .catch(err => {
-                      return reject({
-                        status: 400,
-                        message: 'Error in mapping data.',
-                        error: err
+                        Promise.all([mapping])
+                          .then(responnse => {
+                            return resolve(categoryObj)
+                          })
+                          .catch(err => {
+                            return reject({
+                              status: 400,
+                              message: 'Error in mapping data.',
+                              error: err
+                            })
+                          })
                       })
+                      .catch(error => {})
+                  })
+                  .catch(err => {
+                    console.log('>>>>>>>> err in creating forum >>>', err)
+                    return reject({
+                      status: 400,
+                      message: 'Error in creating forum',
+                      error: err
                     })
+                  })
+              } else {
+                return reject({
+                  status: 400,
+                  message: 'Name is same for org id and identifier'
                 })
-                .catch(error => {})
+              }
             })
-            .catch(err => {
-              console.log('>>>>>>>> err in creating forum >>>', err)
-              return reject({
-                status: 400,
-                message: 'Error in creating forum',
-                error: err
-              })
+            .catch(error => {
+              console.log(error)
+              return reject(error)
             })
         } else {
           return reject({
@@ -310,7 +329,8 @@ async function mappingFunction (key, obj) {
 }
 
 function addPrivileges (reqPrivileges, catIds) {
-  let preArray = []
+  let preArray = [],
+    array = []
   return new Promise(function (resolve, reject) {
     return removeuserPreviliges(catIds)
       .then(res => {
@@ -323,13 +343,9 @@ function addPrivileges (reqPrivileges, catIds) {
             console.log('---------------group nameeeee--------', group)
             return addGroupIntoCategory(group, permissions, catIds)
               .then(res => {
+                array.push(res)
                 return addUserIntoGroup(group, users, permissions, catIds)
                   .then(response => {
-                    console.log(
-                      '-------addUserIntoGroup response---------',
-                      response
-                    )
-                    // resolve(res)
                     preArray.push(response)
                     console.log(
                       '------------reqPrivileges.length === preArray.length----------',
@@ -368,30 +384,6 @@ function addPrivileges (reqPrivileges, catIds) {
           error: error
         })
       })
-  })
-}
-
-function addPrivilegesbackup (reqPrivileges, categoryObj) {
-  let preArray = []
-  return new Promise(function (resolve, reject) {
-    reqPrivileges.map((privilege, index) => {
-      let permissions = privilege.permissions
-      let users = privilege.users
-      let groups = privilege.groups
-      return createGroup(groups, permissions, users, categoryObj)
-        .then(response => {
-          preArray.push(response)
-          if (reqPrivileges.length === preArray.length) return resolve(response)
-        })
-        .catch(error => {
-          console.log('---------errorrrrrrrrr------------', error)
-          return reject({
-            status: 400,
-            message: error.message,
-            error: error
-          })
-        })
-    })
   })
 }
 
@@ -576,7 +568,7 @@ function removeuserPreviliges (catIds) {
             }
           })
           .catch(err => {
-            return res.json({
+            return reject({
               status: 400,
               message: 'Error in removing priviliges',
               error: err
@@ -692,10 +684,98 @@ function privilegesHirerchy (privilegs, type) {
   return givenPrivileges
 }
 
+function getForum (body) {
+  return new Promise(function (resolve, reject) {
+    db.getObject(`batchid_catid_map:` + body.context.identifier)
+      .then(getData => {
+        let finalArray = [],
+          totalArr = []
+        console.log('--------------response ----------', getData)
+        delete getData.type
+        delete getData.batch_id
+        let convertObjToArr = Object.values(getData)
+        convertObjToArr.map(val => {
+          if (
+            val.tenant_id == body.organisationId &&
+            val.batch == body.context.type + body.context.identifier
+          ) {
+            totalArr.push(val)
+            Privilegs.categories
+              .list(val.cat_id)
+              .then(allGroups => {
+                // console.log('------allGroups------', allGroups.groups)
+                finalArray.push({
+                  categoryId: val.cat_id,
+                  name: val.name,
+                  groups: allGroups.groups
+                })
+                if (finalArray.length == totalArr.length) {
+                  console.log(finalArray)
+                  return resolve(finalArray)
+                }
+              })
+              .catch(error => {
+                return reject({
+                  status: 400,
+                  message: 'Error in fetching groups',
+                  error: error
+                })
+              })
+          }
+        })
+      })
+      .catch(error => {
+        console.log(error)
+        return reject({
+          status: 400,
+          message: 'Error in fetching forum',
+          error: error
+        })
+      })
+  })
+}
+
+function checkCat (name, organisationId, type, identifier) {
+  return new Promise(function (resolve, reject) {
+    db.getObject(`batchid_catid_map:` + identifier)
+      .then(getData => {
+        let finalArray = [],
+          data = true
+        delete getData.type
+        delete getData.batch_id
+        let convertObjToArr = Object.values(getData)
+        convertObjToArr.map(val => {
+          if (
+            val.tenant_id == organisationId &&
+            val.batch == type + identifier
+          ) {
+            finalArray.push(val)
+          }
+        })
+        finalArray.map(val => {
+          if (val.name == name) {
+            data = false
+          }
+        })
+        console.log('-------------data ------------', data)
+        return resolve(data)
+      })
+      .catch(error => {
+        console.log(error)
+        return reject({
+          status: 400,
+          message: 'Error in fetching forum',
+          error: error
+        })
+      })
+  })
+}
+
 module.exports = {
   createCategory,
   addPrivileges,
   addSection,
   createForum,
-  createGroup
+  createGroup,
+  getForum
 }

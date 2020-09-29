@@ -898,3 +898,35 @@ function createUser (req, res, next) {
                   //         })
                   //       })
                   //   })
+
+
+
+
+
+
+
+
+
+                  function addPrivilegesbackup (reqPrivileges, categoryObj) {
+                    let preArray = []
+                    return new Promise(function (resolve, reject) {
+                      reqPrivileges.map((privilege, index) => {
+                        let permissions = privilege.permissions
+                        let users = privilege.users
+                        let groups = privilege.groups
+                        return createGroup(groups, permissions, users, categoryObj)
+                          .then(response => {
+                            preArray.push(response)
+                            if (reqPrivileges.length === preArray.length) return resolve(response)
+                          })
+                          .catch(error => {
+                            console.log('---------errorrrrrrrrr------------', error)
+                            return reject({
+                              status: 400,
+                              message: error.message,
+                              error: error
+                            })
+                          })
+                      })
+                    })
+                  }
